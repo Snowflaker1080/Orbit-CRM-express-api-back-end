@@ -1,6 +1,7 @@
 const dotenv = require('dotenv');
 dotenv.config();
 
+// Core imports
 const express = require('express');
 const morgan = require('morgan');
 const cors = require('cors');
@@ -8,32 +9,76 @@ const mongoose = require('mongoose');
 const helmet = require('helmet');
 const compression = require('compression');
 
-// App Set Up
+// Read required env
+const {
+  NODE_ENV = 'development',
+  PORT = 3000,
+  MONGODB_URI,
+  CLIENT_URL = 'https://orbitcrm.netlify.app/',
+  CORS_ORIGINS = '',
+  CORS_ALLOW_REGEX
+} = process.env;
+
+if (!MONGODB_URI) {
+  console.error('Missing MONGODB_URI in environment');
+  process.exit(1);
+}
+
+// App Setup
 const app = express();
+app.set('trust proxy', 1); // Heroku/Reverse proxy friendly (safe for JWT-only)
 
 // Security & performance
 app.use(helmet());
 app.use(compression());
 
-// Middleware
-app.use(cors());
-app.use(express.json());                                      // JSON body parsing
-app.use(morgan(NODE_ENV === 'production' ? 'tiny' : 'dev'));  // Quieter logging in prod
+// JSON body parser
+app.use(express.json());    
+// Logger - Queiter in production                                  
+app.use(morgan(NODE_ENV === 'production' ? 'tiny' : 'dev')); 
 
-// CORS (allow Netlify front-end + localhost for local dev)
-const allowedOrigins = [
-  CLIENT_URL,                 // production front-end (set in env)
-  'http://localhost:5173',    // Vite dev
-  'http://localhost:3000'     // Local front-end
-].filter(Boolean);
+// Middleware & allowlist from env (comma-separated), plus regex (e.g. *.netlify.app)
+const allowlist = (process.env.CORS_ORIGINS || process.env.CLIENT_URL || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+const allowRegex = process.env.CORS_ALLOW_REGEX
+  ? new RegExp(process.env.CORS_ALLOW_REGEX)
+  : null;
 
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true); // allow postman (no origin) and known origins
-    return callback(new Error('Not allowed by CORS'));
+  origin: (origin, cb) => {
+    // Allow server-to-server / curl / Postman (no Origin header)
+    if (!origin) return cb(null, true);
+
+    // Exact match allowlist
+    const okExact = allowlist.includes(origin);
+
+    // Pattern match (e.g any Netlify preview subdomain)
+    let okRegex = false;
+    if (allowRegex) {
+      try {
+        const { hostname } = new URL(origin);
+        okRegex = allowRegex.test(hostname);
+      } catch { /* ignore bad origins */ }
+    }
+
+    if (okExact || okRegex) return cb(null, true);
+    return cb(new Error('CORS: origin not allowed'));
   },
-  credentials: false // set to true only if cookies are used
+  credentials: true,
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization']
 }));
+
+app.options('*', cors()); // preflight for all routes
+
+// Healthcheck
+app.get('/healthz', (_req, res) => {
+  const state = mongoose.connection.readyState; // 0=disconnected 1=connected 2=connecting 3=disconnecting 4=unauth
+  res.json({ ok: true, env: NODE_ENV, db: state });
+});
 
 // Routers
 const authRouter     = require('./controllers/auth');
@@ -57,24 +102,11 @@ app.use((req, res) => {
 });
 
 // Global Error Handler
-app.use((err, req, res, next) => {
-  console.error(err);
+app.use((err, req, res, _next) => {
+  if (NODE_ENV !== 'production') console.error(err);
   const status = err.status || 500;
   res.status(status).json({ error: err.message || 'Server error' });
 });
-
-// --- Sanity checks for required env ---
-const {
-  NODE_ENV = 'development',
-  PORT = 3000,
-  MONGODB_URI,
-  CLIENT_URL = 'https://orbitcrm.netlify.app/',
-} = process.env;
-
-if (!MONGODB_URI) {
-  console.error('Missing MONGODB_URI in environment');
-  process.exit(1);
-}
 
 // Mongoose config & connect + boot
 mongoose.set('debug', NODE_ENV !== 'production');
@@ -87,7 +119,7 @@ let server;
       serverSelectionTimeoutMS: 15000,
       maxPoolSize: 10,
     });
-    console.log(`Connected to MongoDB: ${mongoose.connection.name}`);
+    console.log(`MongoDB connected: ${mongoose.connection.name}`);
 
     server = app.listen(PORT, () => {
       console.log(`Express API listening on port ${PORT} (${NODE_ENV})`);
