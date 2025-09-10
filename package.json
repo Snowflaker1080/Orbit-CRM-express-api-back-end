@@ -4,12 +4,12 @@
   "description": "Personal CRM backend API built with Express, MongoDB, and JWT authentication",
   "main": "server.js",
   "engines": {
-    "node": ">=20"
+    "node": "20.x"
   },
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js -e css,ejs,js,json",
-    "test": "echo \"No tests\""
+    "start": "node -r dotenv-flow/config server.js",
+    "dev": "NODE_ENV=development nodemon -r dotenv-flow/config server.js -e css,ejs,js,json",
+    "test": "NODE_ENV=test node -r dotenv-flow/config server.js"
   },
   "keywords": [
     "express",
@@ -18,7 +18,7 @@
     "crm",
     "api"
   ],
-  "author": "",
+  "author": "Snowflaker1080",
   "license": "MIT",
   "dependencies": {
     "bcrypt": "^5.1.1",
@@ -32,6 +32,7 @@
     "morgan": "^1.10.0"
   },
   "devDependencies": {
+    "dotenv-flow": "^4.1.0",
     "nodemon": "^3.1.9"
   }
 }
