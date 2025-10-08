@@ -14,7 +14,7 @@ const {
   NODE_ENV = 'development',
   PORT = 3000,
   MONGODB_URI,
-  CLIENT_URL = 'https://orbitcrm.netlify.app/',
+  CLIENT_URL = 'https://orbitcrm.netlify.app',
   CORS_ORIGINS = '',
   CORS_ALLOW_REGEX
 } = process.env;
@@ -39,7 +39,7 @@ app.use(morgan(NODE_ENV === 'production' ? 'tiny' : 'dev'));
 
 // Middleware & allowlist from env (comma-separated), plus regex (e.g. *.netlify.app)
 // Build allowlist from env; normalize entries by trimming and removing trailing slashes
-const allowlist = (process.env.CORS_ORIGINS || process.env.CLIENT_URL || '')
+const allowlist = (process.env.CORS_ORIGINS || CLIENT_URL || '')
   .split(',')
   .map(s => s.trim().replace(/\/+$/g, ''))
   .filter(Boolean);
@@ -47,6 +47,11 @@ const allowlist = (process.env.CORS_ORIGINS || process.env.CLIENT_URL || '')
 const allowRegex = process.env.CORS_ALLOW_REGEX
   ? new RegExp(process.env.CORS_ALLOW_REGEX)
   : null;
+
+// Helpful startup trace so deployed instances reveal what origins they're
+// configured to allow. This makes it easy to confirm Heroku/production config.
+console.log('CORS allowlist:', allowlist);
+console.log('CORS allow regex:', allowRegex);
 
 app.use(cors({
   origin: (origin, cb) => {
