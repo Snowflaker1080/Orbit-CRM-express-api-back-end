@@ -97,6 +97,9 @@ const invitesRouter  = require('./controllers/invites');
 
 // API Routes
 app.use('/api/auth', authRouter);
+// Backwards-compatibility: also mount auth router at /auth so clients calling
+// /auth/sign-in (no /api prefix) still work.
+app.use('/auth', authRouter);
 app.use('/api/test', testJwtRouter);
 app.use('/api/users', usersRouter);       
 app.use('/api/groups', groupsRouter);
