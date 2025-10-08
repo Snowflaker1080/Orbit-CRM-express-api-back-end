@@ -39,6 +39,11 @@ router.post('/sign-up', async (req, res) => {
       user: { _id: user._id, username: user.username },
     });
   } catch (err) {
+    // Mongo duplicate-key (e.g. unique index on username or leftover email index)
+    if (err && err.code === 11000) {
+      const dupField = err.keyValue ? Object.keys(err.keyValue).join(', ') : 'field';
+      return res.status(409).json({ error: `Duplicate value for ${dupField}` });
+    }
     return res.status(500).json({ error: err.message || 'Server error' });
   }
 });
