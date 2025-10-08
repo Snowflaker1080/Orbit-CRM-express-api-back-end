@@ -38,9 +38,10 @@ app.use(express.json());
 app.use(morgan(NODE_ENV === 'production' ? 'tiny' : 'dev')); 
 
 // Middleware & allowlist from env (comma-separated), plus regex (e.g. *.netlify.app)
+// Build allowlist from env; normalize entries by trimming and removing trailing slashes
 const allowlist = (process.env.CORS_ORIGINS || process.env.CLIENT_URL || '')
   .split(',')
-  .map(s => s.trim())
+  .map(s => s.trim().replace(/\/+$/g, ''))
   .filter(Boolean);
 
 const allowRegex = process.env.CORS_ALLOW_REGEX
@@ -52,8 +53,11 @@ app.use(cors({
     // Allow server-to-server / curl / Postman (no Origin header)
     if (!origin) return cb(null, true);
 
+    // Normalize incoming origin (strip trailing slash) before checking
+    const normalizedOrigin = origin.replace(/\/+$/g, '');
+
     // Exact match allowlist
-    const okExact = allowlist.includes(origin);
+    const okExact = allowlist.includes(normalizedOrigin);
 
     // Pattern match (e.g any Netlify preview subdomain)
     let okRegex = false;
@@ -65,6 +69,9 @@ app.use(cors({
     }
 
     if (okExact || okRegex) return cb(null, true);
+
+    // Helpful debug message for blocked origins (visible in server logs)
+    console.warn(`CORS: origin not allowed -> ${origin}`);
     return cb(new Error('CORS: origin not allowed'));
   },
   credentials: true,
